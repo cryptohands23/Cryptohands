@@ -7,3 +7,27 @@
 [33m[nodemon] watching path(s): *.*[39m
 [33m[nodemon] watching extensions: ts,json[39m
 [32m[nodemon] starting `ts-node src/index.ts`[39m
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+
+  #  Node.js[4449]: void node::ResetStdio() at ../src/node.cc:766
+  #  Assertion failed: !(err != 0) || (err == -1 && (*__errno_location ()) == 1)
+
+----- Native stack trace -----
+
+ 1: 0xf6ea57 node::Assert(node::AssertionInfo const&) [node]
+ 2: 0xf13e24  [node]
+ 3: 0x7f364e81f55d  [/lib/x86_64-linux-gnu/libc.so.6]
+ 4: 0x7f364e81f69a  [/lib/x86_64-linux-gnu/libc.so.6]
+ 5: 0xe6539f node::DefaultProcessExitHandlerInternal(node::Environment*, node::ExitCode) [node]
+ 6: 0xed1daf node::Environment::Exit(node::ExitCode) [node]
+ 7: 0x7f36475cf5e2 
+
+  #  Node.js[4449]: void node::ResetStdio() at ../src/node.cc:766
+  #  Assertion failed: !(err != 0) || (err == -1 && (*__errno_location ()) == 1)
+
+----- Native stack trace -----
+
+ 1: 0xf6ea57 node::Assert(node::AssertionInfo const&) [node]
+ 2: 0xf13e24  [node]
+ 3: 0xf14542 node::TrapWebAssemblyOrContinue(int, siginfo_t*, void*) [node]
+ 4: 0x7f364e81d050  [/lib/x86_64-linux-gnu/libc.so.6]
