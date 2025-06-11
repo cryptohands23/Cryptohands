@@ -1,0 +1,482 @@
+// Prompt Maestro Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Management
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  avatar    String?
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Settings
+  riskLevel           RiskLevel @default(MODERATE)
+  autoReinvest        Boolean   @default(true)
+  withdrawalThreshold Float     @default(1000)
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
+
+  // Relationships
+  exchanges     Exchange[]
+  strategies    Strategy[]
+  portfolios    Portfolio[]
+  trades        Trade[]
+  notifications Notification[]
+  aiSessions    AISession[]
+
+  @@map("users")
+}
+
+enum RiskLevel {
+  CONSERVATIVE
+  MODERATE
+  AGGRESSIVE
+}
+
+// Exchange Connections
+model Exchange {
+  id          String        @id @default(cuid())
+  userId      String
+  name        String // binance, kucoin, bybit, kraken
+  displayName String
+  apiKey      String // Encrypted
+  apiSecret   String // Encrypted
+  passphrase  String? // For KuCoin
+  isConnected Boolean       @default(false)
+  isTestnet   Boolean       @default(false)
+  status      ExchangeStatus @default(OFFLINE)
+  lastSync    DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relationships
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategies Strategy[]
+  trades     Trade[]
+  balances   Balance[]
+
+  @@map("exchanges")
+}
+
+enum ExchangeStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+  MAINTENANCE
+}
+
+// Portfolio Management
+model Portfolio {
+  id               String   @id @default(cuid())
+  userId           String
+  totalValue       Float    @default(0)
+  totalInvested    Float    @default(0)
+  totalProfit      Float    @default(0)
+  totalProfitPercent Float  @default(0)
+  dailyChange      Float    @default(0)
+  dailyChangePercent Float  @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  // Relationships
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assets Asset[]
+
+  @@map("portfolios")
+}
+
+model Asset {
+  id          String  @id @default(cuid())
+  portfolioId String
+  symbol      String
+  name        String
+  amount      Float
+  value       Float
+  price       Float
+  change24h   Float   @default(0)
+  change24hPercent Float @default(0)
+  allocation  Float   @default(0)
+
+  // Relationships
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@map("assets")
+}
+
+model Balance {
+  id         String   @id @default(cuid())
+  exchangeId String
+  asset      String
+  free       Float    @default(0)
+  locked     Float    @default(0)
+  total      Float    @default(0)
+  usdValue   Float    @default(0)
+  updatedAt  DateTime @updatedAt
+
+  // Relationships
+  exchange Exchange @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+
+  @@unique([exchangeId, asset])
+  @@map("balances")
+}
+
+// Trading Strategies
+model Strategy {
+  id          String        @id @default(cuid())
+  userId      String
+  exchangeId  String
+  name        String
+  type        StrategyType
+  description String?
+  status      StrategyStatus @default(STOPPED)
+  pair        String
+  allocation  Float // USD amount allocated
+  config      Json // Strategy-specific configuration
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Performance metrics
+  totalReturn       Float @default(0)
+  totalReturnPercent Float @default(0)
+  dailyReturn       Float @default(0)
+  weeklyReturn      Float @default(0)
+  monthlyReturn     Float @default(0)
+  maxDrawdown       Float @default(0)
+  sharpeRatio       Float @default(0)
+  winRate           Float @default(0)
+  totalTrades       Int   @default(0)
+  profitableTrades  Int   @default(0)
+  averageProfit     Float @default(0)
+  averageLoss       Float @default(0)
+  currentStreak     Int   @default(0)
+  bestTrade         Float @default(0)
+  worstTrade        Float @default(0)
+
+  // Relationships
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exchange Exchange @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  trades   Trade[]
+
+  @@map("strategies")
+}
+
+enum StrategyType {
+  DCA
+  GRID
+  SCALPING
+  BREAKOUT
+  TRAILING
+  ARBITRAGE
+  MARKET_MAKING
+  COPY_TRADING
+  AI_PREDICTIVE
+  SNIPER
+  YIELD_FARMING
+  SENTIMENT
+}
+
+enum StrategyStatus {
+  ACTIVE
+  PAUSED
+  STOPPED
+  ERROR
+}
+
+// Trading Operations
+model Trade {
+  id         String      @id @default(cuid())
+  userId     String
+  strategyId String
+  exchangeId String
+  pair       String
+  side       TradeSide
+  type       TradeType
+  amount     Float
+  price      Float
+  fee        Float       @default(0)
+  profit     Float?
+  status     TradeStatus
+  reason     String // Why the trade was executed
+  timestamp  DateTime    @default(now())
+
+  // Relationships
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategy Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  exchange Exchange @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+
+  @@map("trades")
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum TradeType {
+  MARKET
+  LIMIT
+  STOP
+  STOP_LIMIT
+}
+
+enum TradeStatus {
+  PENDING
+  FILLED
+  CANCELLED
+  FAILED
+  PARTIALLY_FILLED
+}
+
+// AI & Recommendations
+model AISession {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String // recommendation, analysis, alert
+  input     Json
+  output    Json
+  confidence Float   @default(0)
+  createdAt DateTime @default(now())
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_sessions")
+}
+
+model AIRecommendation {
+  id          String              @id @default(cuid())
+  userId      String
+  type        RecommendationType
+  title       String
+  description String
+  confidence  Float               @default(0)
+  impact      ImpactLevel
+  action      String
+  reasoning   Json
+  status      RecommendationStatus @default(PENDING)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@map("ai_recommendations")
+}
+
+enum RecommendationType {
+  STRATEGY
+  REBALANCE
+  EXIT
+  RISK
+  OPPORTUNITY
+}
+
+enum ImpactLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RecommendationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+// Notifications
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  actionUrl String?
+  createdAt DateTime         @default(now())
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  TRADE
+  PROFIT
+  LOSS
+  AI_RECOMMENDATION
+}
+
+// Market Data
+model MarketData {
+  id            String   @id @default(cuid())
+  symbol        String
+  price         Float
+  change24h     Float    @default(0)
+  change24hPercent Float @default(0)
+  volume24h     Float    @default(0)
+  marketCap     Float    @default(0)
+  high24h       Float    @default(0)
+  low24h        Float    @default(0)
+  timestamp     DateTime @default(now())
+
+  @@unique([symbol, timestamp])
+  @@map("market_data")
+}
+
+// News & Sentiment
+model NewsItem {
+  id            String      @id @default(cuid())
+  title         String
+  summary       String
+  url           String
+  source        String
+  sentiment     Sentiment
+  impact        Float       @default(0)
+  publishedAt   DateTime
+  relevantAssets String[]
+  createdAt     DateTime    @default(now())
+
+  @@map("news_items")
+}
+
+enum Sentiment {
+  POSITIVE
+  NEGATIVE
+  NEUTRAL
+}
+
+// System Monitoring
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     LogLevel
+  service   String
+  message   String
+  metadata  Json?
+  timestamp DateTime @default(now())
+
+  @@map("system_logs")
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+// Backtesting
+model BacktestResult {
+  id              String   @id @default(cuid())
+  strategyId      String
+  startDate       DateTime
+  endDate         DateTime
+  initialCapital  Float
+  finalCapital    Float
+  totalReturn     Float
+  totalReturnPercent Float
+  maxDrawdown     Float
+  sharpeRatio     Float
+  trades          Json
+  equity          Json
+  metrics         Json
+  createdAt       DateTime @default(now())
+
+  @@map("backtest_results")
+}
+
+// DeFi Operations
+model DeFiOperation {
+  id          String        @id @default(cuid())
+  userId      String
+  protocol    String // uniswap, aave, curve, etc.
+  operation   DeFiOpType
+  tokenIn     String?
+  tokenOut    String?
+  amountIn    Float?
+  amountOut   Float?
+  txHash      String?
+  status      OperationStatus
+  gasUsed     Float?
+  gasCost     Float?
+  profit      Float?
+  timestamp   DateTime      @default(now())
+
+  @@map("defi_operations")
+}
+
+enum DeFiOpType {
+  SWAP
+  ADD_LIQUIDITY
+  REMOVE_LIQUIDITY
+  STAKE
+  UNSTAKE
+  CLAIM_REWARDS
+  YIELD_FARM
+}
+
+enum OperationStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+}
+
+// Yield Farming Positions
+model YieldPosition {
+  id          String   @id @default(cuid())
+  userId      String
+  protocol    String
+  pool        String
+  token0      String
+  token1      String?
+  amount      Float
+  apy         Float
+  rewards     Float    @default(0)
+  autoCompound Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("yield_positions")
+}
+
+// Copy Trading
+model CopyTrader {
+  id          String   @id @default(cuid())
+  name        String
+  platform    String
+  winRate     Float
+  totalReturn Float
+  maxDrawdown Float
+  followers   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("copy_traders")
+}
+
+model CopyPosition {
+  id         String   @id @default(cuid())
+  userId     String
+  traderId   String
+  allocation Float
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("copy_positions")
+}
